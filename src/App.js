@@ -1,20 +1,22 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import Highcharts from 'highcharts';
+import Bellcurve from 'highcharts/modules/histogram-bellcurve';
 import HighchartsMore from 'highcharts/highcharts-more';
 import HighchartsReact from 'highcharts-react-official';
 import classes from './app.module.scss';
+import { getRangePlusData, getRangeMinusData, getLineData } from './data';
 import Select from 'react-select';
 
 HighchartsMore(Highcharts);
+Bellcurve(Highcharts);
 
 const API_URL = 'http://0.0.0.0:7410/data';
 
 const App = () => {
   const [data, setData] = useState(null);
-  const [selectX, setSelectX] = useState(null);
-  const [selectY, setSelectY] = useState(null);
-  const [selectOptions, setSelectOptions] = useState();
+  const [sensor_data, setSensor_data] = useState(null);
+  const [selectedOption, setSelectedOption] = useState(null);
 
   useEffect(() => {
     getData();
@@ -26,16 +28,7 @@ const App = () => {
         data: { sensor_data },
       } = await axios.get(API_URL);
 
-      setSelectOptions(
-        Object.keys(sensor_data)
-          .filter(item => item !== 'sample index' && item !== 'class_label')
-          .map(item => {
-            return {
-              value: item,
-              label: item,
-            };
-          }),
-      );
+      setSensor_data(sensor_data);
 
       let newData = {};
       const sampleLabel = sensor_data['sample index'];
@@ -54,74 +47,139 @@ const App = () => {
     } catch (error) {}
   };
 
-  const handleChange = (selectedOption, axis) => {
-    if (axis === 'x') {
-      setSelectX(selectedOption);
-    } else if (axis === 'y') {
-      setSelectY(selectedOption);
-    }
-  };
+  let graphOptions;
 
-  const getSelectOptions = class_label => {
-    if (data && selectX) {
-      return Object.keys(data)
-        .filter(item =>
-          class_label === 'minus'
-            ? data[item].class_label === -1
-            : data[item].class_label === 1,
-        )
-        .map(item => {
-          return [data[item].sensor5, data[item].sensor1];
-        });
-    }
-  };
-
-  const graphOptions = {
-    title: {
-      text: 'My chart',
-    },
-    series: [
-      {
-        type: 'scatter',
-        name: 'class_label -1',
-        color: '#EC9A29',
-        data: getSelectOptions('minus'),
+  if (selectedOption && selectedOption.value === 'column-range') {
+    graphOptions = {
+      title: {
+        text: 'My chart',
       },
-      {
-        type: 'scatter',
-        name: 'class_label +1',
-        color: '#F24333',
-        data: getSelectOptions('plus'),
+      series: [
+        {
+          name: 'class_label +1',
+          color: '#EC9A29',
+          type: 'columnrange',
+          data: getRangePlusData(sensor_data),
+        },
+        {
+          name: 'class_label -1',
+          color: '#F24333',
+          type: 'columnrange',
+          data: getRangeMinusData(sensor_data),
+        },
+      ],
+    };
+  }
+
+  // if (selectedOption && selectedOption.value === 'line-chart') {
+  //   graphOptions = {
+  //     title: {
+  //       text: 'My chart',
+  //     },
+  //     series: [
+  //       {
+  //         name: 'sensor0',
+  //         color: '#EC9A29',
+  //         type: 'line',
+  //         data: getLineData(sensor_data, 'sensor0'),
+  //       },
+  //       {
+  //         name: 'sensor1',
+  //         color: '#F24333',
+  //         type: 'line',
+  //         data: getLineData(sensor_data, 'sensor1'),
+  //       },
+  //       {
+  //         name: 'sensor2',
+  //         color: '#009b72',
+  //         type: 'line',
+  //         data: getLineData(sensor_data, 'sensor2'),
+  //       },
+  //       {
+  //         name: 'sensor3',
+  //         color: '#009b72',
+  //         type: 'line',
+  //         data: getLineData(sensor_data, 'sensor3'),
+  //       },
+  //     ],
+  //   };
+  // }
+
+  if (selectedOption && selectedOption.value === 'line-chart') {
+    graphOptions = {
+      title: {
+        text: 'My chart',
       },
-    ],
+      xAxis: [
+        {
+          title: {
+            text: 'Data',
+          },
+          alignTicks: false,
+        },
+        {
+          title: {
+            text: 'Bell curve',
+          },
+          alignTicks: false,
+          opposite: true,
+        },
+      ],
+      yAxis: [
+        {
+          title: { text: 'Data' },
+        },
+        {
+          title: { text: 'Bell curve' },
+          opposite: true,
+        },
+      ],
+      series: [
+        {
+          name: 'Bell curve',
+          type: 'histogram', //bellcurve
+          color: '#FFb161',
+          xAxis: 1,
+          yAxis: 1,
+          baseSeries: 1,
+          zIndex: -1,
+        },
+        {
+          name: 'Data',
+          type: 'scatter',
+          color: '#00171F',
+          data: getLineData(sensor_data, 'sensor3'),
+          marker: {
+            radius: 2,
+          },
+        },
+      ],
+    };
+  }
+
+  const selectOtions = [
+    { value: 'column-range', label: 'Column Range Graph' },
+    { value: 'line-chart', label: 'Line Graph' },
+  ];
+
+  const handleChange = selectedOption => {
+    setSelectedOption(selectedOption);
+    console.log(`Option selected:`, selectedOption);
   };
 
-  console.log(graphOptions);
+  console.log(data);
 
   return (
     <div className={classes.container}>
-      <div className={classes.graphSelect}>
-        <div className={classes.selectOption}>
-          <p>Y-Axis</p>
-          <Select
-            value={selectY}
-            onChange={e => handleChange(e, 'y')}
-            options={selectOptions}
-          />
-        </div>
-        <div className={classes.graph}>
-          <HighchartsReact highcharts={Highcharts} options={graphOptions} />
-        </div>
+      <div className={classes.graph}>
+        <HighchartsReact highcharts={Highcharts} options={graphOptions} />
       </div>
-      <div className={classes.option}>
-        <div className={classes.selectOption}>
-          <Select
-            value={selectX}
-            onChange={e => handleChange(e, 'x')}
-            options={selectOptions}
-          />
-          <p>X-Axis</p>
-        </div>
+      <div className={classes.select}>
+        <Select
+          value={selectedOption}
+          onChange={handleChange}
+          options={selectOtions}
+        />
       </div>
     </div>
   );
